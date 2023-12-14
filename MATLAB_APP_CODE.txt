@@ -51,6 +51,7 @@ classdef Perfect_IVP_Project_code < matlab.apps.AppBase
                 % Invert the colors
                 inverted_img = 255 - img;
 
+
                 % Display the inverted image in app.ImageAxes_2
                 imshow(inverted_img, 'Parent', app.ImageAxes_2);
                 drawnow;
@@ -58,6 +59,7 @@ classdef Perfect_IVP_Project_code < matlab.apps.AppBase
                 % Display the histogram of the inverted image
                 app.showOutputHistogram(inverted_img);
                 drawnow;
+
 
             catch ME
                 % If there's an error, display an alert
@@ -74,8 +76,10 @@ classdef Perfect_IVP_Project_code < matlab.apps.AppBase
                 return;
             end
 
+
+
             try
-                % Read the input image from the stored path
+                % Read the input image from stored path
                 img = imread(app.SelectedImagePath);
 
                 % Prompt user for brightness adjustment using a slider or input field
