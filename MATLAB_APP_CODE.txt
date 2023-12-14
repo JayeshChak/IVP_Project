@@ -1,0 +1,858 @@
+classdef Perfect_IVP_Project_code < matlab.apps.AppBase
+
+    % Properties that correspond to app components
+    properties (Access = public)
+        UIFigure               matlab.ui.Figure
+        DigitalImageProcessingToolPanel  matlab.ui.container.Panel
+        CONVERTTOButtonGroup   matlab.ui.container.ButtonGroup
+        InvertColorsButton     matlab.ui.control.RadioButton
+        Slider                 matlab.ui.control.Slider
+        SliderLabel            matlab.ui.control.Label
+        EdgeDetectionButton    matlab.ui.control.RadioButton
+        BrightnessButton       matlab.ui.control.RadioButton
+        BlurButton             matlab.ui.control.RadioButton
+        SharpenButton          matlab.ui.control.RadioButton
+        GreenMonochromeButton  matlab.ui.control.RadioButton
+        BlueMonochromeButton   matlab.ui.control.RadioButton
+        RedMonochromeButton    matlab.ui.control.RadioButton
+        SepiaButton            matlab.ui.control.RadioButton
+        BlackAndWhiteButton    matlab.ui.control.RadioButton
+        SaveOutputImageButton  matlab.ui.control.Button
+        LoadButton             matlab.ui.control.Button
+        OutputHistogram        matlab.ui.control.UIAxes
+        ImageAxes_2            matlab.ui.control.UIAxes
+        ImageAxes              matlab.ui.control.UIAxes
+        GreenAxes              matlab.ui.control.UIAxes
+        BlueAxes               matlab.ui.control.UIAxes
+        RedAxes                matlab.ui.control.UIAxes
+    end
+
+
+    properties (Access = private)
+        SelectedImagePath = '';  % Initialize with an empty string
+    end
+
+    properties (Access = private)
+        OutputImage  % Add this line to define the OutputImage property
+    end
+
+    methods (Access = public)
+        function InvertColorsButtonValueChanged(app, ~)
+            % Check if a file has been selected
+            if isempty(app.SelectedImagePath)
+                uialert(app.UIFigure, 'Please select an image first.', 'Image Error');
+                return;
+            end
+
+            try
+                % Read the input image from the stored path
+                img = imread(app.SelectedImagePath);
+
+                % Invert the colors
+                inverted_img = 255 - img;
+
+                % Display the inverted image in app.ImageAxes_2
+                imshow(inverted_img, 'Parent', app.ImageAxes_2);
+                drawnow;
+
+                % Display the histogram of the inverted image
+                app.showOutputHistogram(inverted_img);
+                drawnow;
+
+            catch ME
+                % If there's an error, display an alert
+                uialert(app.UIFigure, ME.message, 'Image Processing Error');
+            end
+        end
+
+
+        % Callback function for the Brightness Adjustment radio button
+        function BrightnessButtonValueChanged(app, ~)
+            % Check if a file has been selected
+            if isempty(app.SelectedImagePath)
+                uialert(app.UIFigure, 'Please select an image first.', 'Image Error');
+                return;
+            end
+
+            try
+                % Read the input image from the stored path
+                img = imread(app.SelectedImagePath);
+
+                % Prompt user for brightness adjustment using a slider or input field
+                brightnessAdjustment = app.Slider.Value; % Replace with actual slider value
+
+                % Adjust the brightness
+                adjusted_img = adjustBrightness(app, img, brightnessAdjustment);
+
+                % Display the adjusted image in app.ImageAxes_2
+                imshow(adjusted_img, 'Parent', app.ImageAxes_2);
+                drawnow;
+
+                % Display the histogram of the adjusted image
+                app.showOutputHistogram(adjusted_img);
+                drawnow;
+
+            catch ME
+                % If there's an error, display an alert
+                uialert(app.UIFigure, ME.message, 'Image Processing Error');
+            end
+        end
+
+        % Callback function for the Edge Detection radio button
+        function EdgeDetectionButtonValueChanged(app, ~)
+            % Check if a file has been selected
+            if isempty(app.SelectedImagePath)
+                uialert(app.UIFigure, 'Please select an image first.', 'Image Error');
+                return;
+            end
+
+            try
+                % Read the input image from the stored path
+                img = imread(app.SelectedImagePath);
+
+                % Convert the image to grayscale
+                gray_img = rgb2gray(img);
+
+                % Compute gradients using the central difference method
+                [Gx, Gy] = gradient(double(gray_img));
+
+                % Compute magnitude of the gradient
+                gradient_mag = sqrt(Gx.^2 + Gy.^2);
+
+                % Normalize the gradient magnitude to the range [0, 1]
+                normalized_gradient = (gradient_mag - min(gradient_mag(:))) / (max(gradient_mag(:)) - min(gradient_mag(:)));
+
+                % Display the edge-detected image in app.ImageAxes_2
+                imshow(normalized_gradient, 'Parent', app.ImageAxes_2);
+                drawnow;
+
+                % Display the histogram of the edge-detected image
+                app.showOutputHistogram(normalized_gradient);
+                drawnow;
+
+            catch ME
+                % If there's an error, display an alert
+                uialert(app.UIFigure, ME.message, 'Image Processing Error');
+            end
+        end
+
+        % Additional function for brightness adjustment
+        function adjusted_img = adjustBrightness(~,img, adjustment)
+            % Convert the input image to double for adjustment
+            img_double = double(img);
+
+            % Adjust the brightness
+            adjusted_img_double = img_double + adjustment;
+
+            % Clip values to the valid range [0, 255]
+            adjusted_img_double = max(0, min(adjusted_img_double, 255));
+
+            % Convert back to uint8 for display
+            adjusted_img = uint8(adjusted_img_double);
+        end
+
+        % Function to apply blur to an image
+        function blurred_img = simpleBlur(~,img)
+            % Convert the input image to double
+            img_double = double(img);
+
+            % Create a 2D Gaussian filter kernel
+            kernelSize = 8;  % Adjust this to your desired kernel size
+            sigma = 1;       % Adjust this to your desired standard deviation
+            halfSize = (kernelSize - 1) / 2;
+
+            [X, Y] = meshgrid(-halfSize:halfSize, -halfSize:halfSize);
+            kernel = exp(-(X.^2 + Y.^2) / (2 * sigma^2));
+            kernel = kernel / sum(kernel(:));  % Normalize the kernel
+
+            % Apply Gaussian blur separately to each color channel (for RGB)
+            blurred_channels = zeros(size(img_double));
+            for i = 1:size(img_double, 3)
+                blurred_channels(:,:,i) = conv2(img_double(:,:,i), kernel, 'same');
+            end
+
+            % Combine the blurred color channels back into an RGB image
+            blurred_img = uint8(blurred_channels);
+        end
+
+        function applySharpnessCallback(app, img, percentage)
+            % ... (existing code)
+
+            % Apply sharpness with the specified percentage
+            sharpened_img = app.applySharpness(img, percentage);
+
+            % Display the output image in app.ImageAxes_2
+            imshow(sharpened_img, 'Parent', app.ImageAxes_2);
+
+            % Display the histogram of the output image
+            app.showOutputHistogram(sharpened_img);
+        end
+
+        function sharpened_img = applySharpness(~, img, percentage)
+            % Ensure percentage is in the valid range
+            percentage = max(0, min(percentage, 100));
+
+            % Convert percentage to a sharpening factor between 0 and 1
+            sharpeningFactor = percentage / 100;
+
+            % Define the sharpening kernel
+            kernel = [0 -1 0; -1 5 -1; 0 -1 0];
+
+            % Apply the sharpening kernel separately to each color channel (for RGB)
+            sharpened_img = img;
+            for i = 1:size(img, 3)
+                sharpened_img(:,:,i) = conv2(double(img(:,:,i)), kernel * sharpeningFactor, 'same');
+            end
+        end
+
+        function custom_monochrome_img = applyMonochromeFilterByRGB(~, img, targetRGB)
+            % Ensure targetRGB is a row vector
+            targetRGB = double(reshape(targetRGB, 1, 3));
+
+            % Convert image to double for element-wise multiplication
+            img_double = double(img);
+
+            % Initialize the custom monochrome image
+            custom_monochrome_img = img_double;
+
+            % Create a logical mask for pixels that do not match the targetRGB
+            mask = all(bsxfun(@eq, img_double, permute(targetRGB, [1, 3, 2])), 3);
+
+            % Set the RGB values to zero for pixels that do not match the targetRGB
+            custom_monochrome_img = bsxfun(@times, custom_monochrome_img, ~mask);
+
+            % Convert the result back to uint8
+            custom_monochrome_img = uint8(custom_monochrome_img);
+        end
+
+
+        function green_monochrome_img = applyGreenMonochromeFilter(~,input_img)
+            % Keep only the green channel
+            green_monochrome_img = input_img;
+            green_monochrome_img(:, :, 1) = 0;  % Set red channel to zero
+            green_monochrome_img(:, :, 3) = 0;  % Set blue channel to zero
+        end
+
+        function blue_monochrome_img = applyBlueMonochromeFilter(~,input_img)
+            % Keep only the blue channel
+            blue_monochrome_img = input_img;
+            blue_monochrome_img(:, :, 1) = 0;  % Set red channel to zero
+            blue_monochrome_img(:, :, 2) = 0;  % Set green channel to zero
+        end
+
+        function red_monochrome_img = applyRedMonochromeFilter(~,input_img)
+            % Keep only the red channel
+            red_monochrome_img = input_img;
+            red_monochrome_img(:, :, 2) = 0;  % Set green channel to zero
+            red_monochrome_img(:, :, 3) = 0;  % Set blue channel to zero
+        end
+
+        function sepia_img = applySepiaFilter(~,input_img)
+            % Sepia filter coefficients
+            A = [0.393, 0.769, 0.189;
+                0.349, 0.686, 0.168;
+                0.272, 0.534, 0.131];
+
+            % Convert input_img to double for matrix multiplication
+            input_img = double(input_img);
+
+            % Reshape input_img to a 2D array
+            [rows, cols, channels] = size(input_img);
+            input_img = reshape(input_img, [], channels);
+
+            % Apply Sepia filter element-wise
+            sepia_img = min(max(input_img * A', 0), 255);
+
+            % Reshape sepia_img back to the original size
+            sepia_img = uint8(reshape(sepia_img, rows, cols, channels));
+        end
+
+
+
+        % Function to display a more precise histogram in app.OutputHistogram
+        function showOutputHistogram(app, OutputImage)
+            % Increase precision by using more bins
+            numBins = 256;  % Adjust the number of bins as needed
+
+            % Convert output image to double to avoid the warning
+            outputImageDouble = double(OutputImage);
+
+            % Calculate histogram data using histcounts
+            counts = histcounts(outputImageDouble, numBins);
+            edges = linspace(min(outputImageDouble(:)), max(outputImageDouble(:)), numBins + 1);
+
+            % Plot the histogram of the output image
+            histogram(app.OutputHistogram, 'BinEdges', edges, 'BinCounts', counts, 'FaceColor', [0 0 0], 'EdgeColor', 'none');
+
+            % Customize the axes labels as needed
+            title(app.OutputHistogram, 'Output Histogram');
+            xlabel(app.OutputHistogram, 'Intensity');
+            ylabel(app.OutputHistogram, 'Pixels');
+        end
+
+        function updateimage(app,imagefile)
+
+            % For corn.tif, read the second image in the file
+            if strcmp(imagefile,'corn.tif')
+                im = imread('corn.tif', 2);
+            else
+                try
+                    im = imread(imagefile);
+                catch ME
+                    % If problem reading image, display error message
+                    uialert(app.UIFigure, ME.message, 'Image Error');
+                    return;
+                end
+            end
+
+            % Create histograms based on number of color channels
+            switch size(im,3)
+                case 1
+                    % Display the grayscale image
+                    imagesc(app.ImageAxes,im);
+
+                    % Plot all histograms with the same data for grayscale
+                    histr = histogram(app.RedAxes, im, 'FaceColor',[1 0 0],'EdgeColor', 'none');
+                    histg = histogram(app.GreenAxes, im, 'FaceColor',[0 1 0],'EdgeColor', 'none');
+                    histb = histogram(app.BlueAxes, im, 'FaceColor',[0 0 1],'EdgeColor', 'none');
+
+                case 3
+                    % Display the truecolor image
+                    imagesc(app.ImageAxes,im);
+
+                    % Plot the histograms
+                    histr = histogram(app.RedAxes, im(:,:,1), 'FaceColor', [1 0 0], 'EdgeColor', 'none');
+                    histg = histogram(app.GreenAxes, im(:,:,2), 'FaceColor', [0 1 0], 'EdgeColor', 'none');
+                    histb = histogram(app.BlueAxes, im(:,:,3), 'FaceColor', [0 0 1], 'EdgeColor', 'none');
+
+                otherwise
+                    % Error when image is not grayscale or truecolor
+                    uialert(app.UIFigure, 'Image must be grayscale or truecolor.', 'Image Error');
+                    return;
+            end
+            % Get largest bin count
+            maxr = max(histr.BinCounts);
+            maxg = max(histg.BinCounts);
+            maxb = max(histb.BinCounts);
+            maxcount = max([maxr maxg maxb]);
+
+            % Set y axes limits based on largest bin count
+            app.RedAxes.YLim = [0 maxcount];
+            app.RedAxes.YTick = round([0 maxcount/2 maxcount], 2, 'significant');
+            app.GreenAxes.YLim = [0 maxcount];
+            app.GreenAxes.YTick = round([0 maxcount/2 maxcount], 2, 'significant');
+            app.BlueAxes.YLim = [0 maxcount];
+            app.BlueAxes.YTick = round([0 maxcount/2 maxcount], 2, 'significant');
+
+        end
+    end
+
+
+    % Callbacks that handle component events
+    methods (Access = private)
+
+        % Code that executes after component creation
+        function startupFcn(app)
+            % Configure image axes
+            app.ImageAxes.Visible = 'off';
+            app.ImageAxes.Colormap = gray(256);
+            axis(app.ImageAxes, 'image');
+
+            % Update the image and histograms
+            updateimage(app, 'peppers.png');
+        end
+
+        % Button pushed function: LoadButton
+        function LoadButtonPushed(app, event)
+
+            % Display uigetfile dialog
+            filterspec = {'*.jpg;*.tif;*.png;*.gif','All Image Files'};
+            [file, path] = uigetfile(filterspec);
+
+            % Make sure user didn't cancel uigetfile dialog
+            if ischar(path)
+                app.SelectedImagePath = fullfile(path, file);
+                updateimage(app, app.SelectedImagePath);
+            end
+        end
+
+        % Button pushed function: SaveOutputImageButton
+        function SaveOutputImageButtonPushed(app, event)
+            % Find the image object in app.ImageAxes_2
+            imageObj = findobj(app.ImageAxes_2, 'Type', 'image');
+
+            % Check if there is an image object
+            if isempty(imageObj)
+                uialert(app.UIFigure, 'No output image to save.', 'Save Error');
+                return;
+            end
+
+            % Get the CData (image data) from the image object
+            outputImage = get(imageObj, 'CData');
+
+            % Prompt the user to select a save location and provide a new file name
+            [filename, pathname] = uiputfile({'*.png', 'PNG Files (*.png)'; '*.jpg', 'JPEG Files (*.jpg)'; '*.tif', 'TIFF Files (*.tif)'}, 'Save Output Image As', 'output_image.png');
+
+            % Check if the user canceled the operation
+            if isequal(filename, 0) || isequal(pathname, 0)
+                return;  % User canceled
+            end
+
+            % Create the full path to the save location
+            savePath = fullfile(pathname, filename);
+
+            % Save the output image
+            try
+                imwrite(outputImage, savePath);
+                uialert(app.UIFigure, 'Output image saved successfully.', 'Save Success');
+            catch ME
+                uialert(app.UIFigure, ME.message, 'Save Error');
+            end
+        end
+
+        % Selection changed function: CONVERTTOButtonGroup
+        function CONVERTTOButtonGroupSelectionChanged(app, event)
+            selectedButton = app.CONVERTTOButtonGroup.SelectedObject;
+            %---------------------------------------------------------------------------------------------------------------------------
+            if app.BlackAndWhiteButton == selectedButton
+                % Check if a file has been selected
+                if isempty(app.SelectedImagePath)
+                    uialert(app.UIFigure, 'Please select an image first.', 'Image Error');
+                    return;
+                end
+
+                try
+                    % Read the input image from the stored path
+                    img = imread(app.SelectedImagePath);
+
+                    % Convert to grayscale
+                    gray_img = rgb2gray(img);
+
+                    % Display the output image in app.ImageAxes_2
+                    imshow(gray_img, 'Parent', app.ImageAxes_2);
+
+                    % Display the histogram of the output image
+                    showOutputHistogram(app, gray_img);
+                    % Save the output image (optional)
+                    %imwrite(gray_img, 'output_image.png');
+                catch ME
+                    % If there's an error, display an alert
+                    uialert(app.UIFigure, ME.message, 'Image Processing Error');
+                end
+                %---------------------------------------------------------------------------------------------------------------------------
+            elseif app.SepiaButton == selectedButton
+                % Logic for applying sepia filter
+                % Check if a file has been selected
+                if isempty(app.SelectedImagePath)
+                    uialert(app.UIFigure, 'Please select an image first.', 'Image Error');
+                    return;
+                end
+
+                try
+                    % Read the input image from the stored path
+                    img = imread(app.SelectedImagePath);
+
+                    % Apply Sepia filter
+                    sepia_img = applySepiaFilter(app,img);
+
+                    % Display the output image in app.ImageAxes_2
+                    imshow(sepia_img, 'Parent', app.ImageAxes_2);
+
+                    % Display the histogram of the output image
+                    showOutputHistogram(app, sepia_img);
+                    % Save the output image (optional)
+                    % imwrite(sepia_img, 'output_image.png');
+                catch ME
+                    % If there's an error, display an alert
+                    uialert(app.UIFigure, ME.message, 'Image Processing Error');
+                end
+                %---------------------------------------------------------------------------------------------------------------------------
+            elseif app.RedMonochromeButton == selectedButton
+                % Logic for showing the red monochrome version
+                if isempty(app.SelectedImagePath)
+                    uialert(app.UIFigure, 'Please select an image first.', 'Image Error');
+                    return;
+                end
+
+                try
+                    % Read the input image from the stored path
+                    img = imread(app.SelectedImagePath);
+
+                    % Apply red monochrome filter
+                    red_monochrome_img = applyRedMonochromeFilter(app,img);
+
+                    % Display the output image in app.ImageAxes_2
+                    imshow(red_monochrome_img, 'Parent', app.ImageAxes_2);
+
+                    % Display the histogram of the output image
+                    showOutputHistogram(app, red_monochrome_img);
+                    % Save the output image (optional)
+                    % imwrite(red_monochrome_img, 'output_image.png');
+                catch ME
+                    % If there's an error, display an alert
+                    uialert(app.UIFigure, ME.message, 'Image Processing Error');
+                end
+                %---------------------------------------------------------------------------------------------------------------------------
+            elseif app.BlueMonochromeButton == selectedButton
+                % Logic for showing the blue monochrome version
+                if isempty(app.SelectedImagePath)
+                    uialert(app.UIFigure, 'Please select an image first.', 'Image Error');
+                    return;
+                end
+
+                try
+                    % Read the input image from the stored path
+                    img = imread(app.SelectedImagePath);
+
+                    % Apply blue monochrome filter
+                    blue_monochrome_img = applyBlueMonochromeFilter(app,img);
+
+                    % Display the output image in app.ImageAxes_2
+                    imshow(blue_monochrome_img, 'Parent', app.ImageAxes_2);
+
+                    % Display the histogram of the output image
+                    showOutputHistogram(app, blue_monochrome_img);
+                    % Save the output image (optional)
+                    % imwrite(blue_monochrome_img, 'output_image.png');
+                catch ME
+                    % If there's an error, display an alert
+                    uialert(app.UIFigure, ME.message, 'Image Processing Error');
+                end
+
+                %---------------------------------------------------------------------------------------------------------------------------
+
+            elseif app.GreenMonochromeButton == selectedButton
+                % Logic for showing the green monochrome version
+                if isempty(app.SelectedImagePath)
+                    uialert(app.UIFigure, 'Please select an image first.', 'Image Error');
+                    return;
+                end
+
+                try
+                    % Read the input image from the stored path
+                    img = imread(app.SelectedImagePath);
+
+                    % Apply green monochrome filter
+                    green_monochrome_img = applyGreenMonochromeFilter(app,img);
+
+                    % Display the output image in app.ImageAxes_2
+                    imshow(green_monochrome_img, 'Parent', app.ImageAxes_2);
+
+                    % Display the histogram of the output image
+                    showOutputHistogram(app, green_monochrome_img);
+                    % Save the output image (optional)
+                    % imwrite(green_monochrome_img, 'output_image.png');
+                catch ME
+                    % If there's an error, display an alert
+                    uialert(app.UIFigure, ME.message, 'Image Processing Error');
+                end
+                %---------------------------------------------------------------------------------------------------------------------------
+            elseif app.InvertColorsButton == selectedButton
+                % Callback for the Invert Colors radio button
+                InvertColorsButtonValueChanged(app);
+            elseif app.BrightnessButton == selectedButton
+                % Callback for the Brightness Adjustment radio button
+                BrightnessButtonValueChanged(app);
+            elseif app.EdgeDetectionButton == selectedButton
+                % Callback for the Edge Detection radio button
+                EdgeDetectionButtonValueChanged(app);
+                %---------------------------------------------------------------------------------------------------------------------------
+
+            elseif app.SharpenButton == selectedButton
+                % Logic for applying sharpening
+                % Check if a file has been selected
+                if isempty(app.SelectedImagePath)
+                    uialert(app.UIFigure, 'Please select an image first.', 'Image Error');
+                    return;
+                end
+
+                try
+                    img = imread(app.SelectedImagePath);
+                    % Prompt user for sharpening percentage using a slider
+                    sharpeningPercentage = app.Slider.Value;
+
+                    % Call the sharpening callback function
+                    app.applySharpnessCallback(img, sharpeningPercentage);
+                catch ME
+                    % If there's an error, display an alert
+                    uialert(app.UIFigure, ME.message, 'Image Processing Error');
+                end
+                %---------------------------------------------------------------------------------------------------------------------------
+            elseif app.BlurButton == selectedButton
+                % Logic for applying blur
+                % Check if a file has been selected
+                % Check if a file has been selected
+                if isempty(app.SelectedImagePath)
+                    uialert(app.UIFigure, 'Please select an image first.', 'Image Error');
+                    return;
+                end
+
+                try
+                    % Read the input image from the stored path
+                    img = imread(app.SelectedImagePath);
+
+                    % Apply the simple blur effect
+                    blurred_img = simpleBlur(app,img);
+
+                    % Display the blurred image in app.ImageAxes
+                    imshow(blurred_img, 'Parent', app.ImageAxes_2);
+
+                    % Display the histogram of the blurred image (if you have a function for it)
+                    app.showOutputHistogram(blurred_img);
+
+                catch ME
+                    % If there's an error, display an alert
+                    uialert(app.UIFigure, ME.message, 'Image Processing Error');
+                end
+            end
+        end
+    end
+
+    % Component initialization
+    methods (Access = private)
+
+        % Create UIFigure and components
+        function createComponents(app)
+
+            % Create UIFigure and hide until all components are created
+            app.UIFigure = uifigure('Visible', 'off');
+            app.UIFigure.Color = [0.098 0.0235 0.5412];
+            app.UIFigure.Position = [50 50 1200 800];
+            app.UIFigure.Name = 'Image Histograms';
+
+            % Create DigitalImageProcessingToolPanel
+            app.DigitalImageProcessingToolPanel = uipanel(app.UIFigure);
+            app.DigitalImageProcessingToolPanel.ForegroundColor = [0.149 0.149 0.149];
+            app.DigitalImageProcessingToolPanel.TitlePosition = 'centertop';
+            app.DigitalImageProcessingToolPanel.Title = 'Digital Image Processing Tool';
+            app.DigitalImageProcessingToolPanel.BackgroundColor = [0.6588 0.851 1];
+            app.DigitalImageProcessingToolPanel.FontName = 'Georgia';
+            app.DigitalImageProcessingToolPanel.FontWeight = 'bold';
+            app.DigitalImageProcessingToolPanel.FontSize = 25;
+            app.DigitalImageProcessingToolPanel.Position = [28 37 1145 730];
+
+            % Create RedAxes
+            app.RedAxes = uiaxes(app.DigitalImageProcessingToolPanel);
+            title(app.RedAxes, 'Red')
+            xlabel(app.RedAxes, 'Intensity')
+            ylabel(app.RedAxes, 'Pixels')
+            app.RedAxes.XLim = [0 255];
+            app.RedAxes.XTick = [0 128 255];
+            app.RedAxes.XGrid = 'on';
+            app.RedAxes.YGrid = 'on';
+            app.RedAxes.ZGrid = 'on';
+            app.RedAxes.Position = [451 452 249 195];
+
+            % Create BlueAxes
+            app.BlueAxes = uiaxes(app.DigitalImageProcessingToolPanel);
+            title(app.BlueAxes, 'Blue')
+            xlabel(app.BlueAxes, 'Intensity')
+            ylabel(app.BlueAxes, 'Pixels')
+            app.BlueAxes.XLim = [0 255];
+            app.BlueAxes.XTick = [0 128 255];
+            app.BlueAxes.XGrid = 'on';
+            app.BlueAxes.YGrid = 'on';
+            app.BlueAxes.ZGrid = 'on';
+            app.BlueAxes.Position = [450 237 249 198];
+
+            % Create GreenAxes
+            app.GreenAxes = uiaxes(app.DigitalImageProcessingToolPanel);
+            title(app.GreenAxes, 'Green')
+            xlabel(app.GreenAxes, 'Intensity')
+            ylabel(app.GreenAxes, 'Pixels')
+            app.GreenAxes.XLim = [0 255];
+            app.GreenAxes.XTick = [0 128 255];
+            app.GreenAxes.XGrid = 'on';
+            app.GreenAxes.YGrid = 'on';
+            app.GreenAxes.ZGrid = 'on';
+            app.GreenAxes.Position = [450 18 249 193];
+
+            % Create ImageAxes
+            app.ImageAxes = uiaxes(app.DigitalImageProcessingToolPanel);
+            app.ImageAxes.XTick = [];
+            app.ImageAxes.XTickLabel = {'[ ]'};
+            app.ImageAxes.YTick = [];
+            app.ImageAxes.Position = [61 77 348 236];
+
+            % Create ImageAxes_2
+            app.ImageAxes_2 = uiaxes(app.DigitalImageProcessingToolPanel);
+            app.ImageAxes_2.XTick = [];
+            app.ImageAxes_2.XTickLabel = {'[ ]'};
+            app.ImageAxes_2.YTick = [];
+            app.ImageAxes_2.Position = [737 76 375 236];
+
+            % Create OutputHistogram
+            app.OutputHistogram = uiaxes(app.DigitalImageProcessingToolPanel);
+            title(app.OutputHistogram, 'Output Histogram')
+            xlabel(app.OutputHistogram, 'Intensity')
+            ylabel(app.OutputHistogram, 'Pixels')
+            app.OutputHistogram.XLim = [0 255];
+            app.OutputHistogram.XTick = [0 128 255];
+            app.OutputHistogram.LineWidth = 0.2;
+            app.OutputHistogram.XGrid = 'on';
+            app.OutputHistogram.YGrid = 'on';
+            app.OutputHistogram.ZGrid = 'on';
+            app.OutputHistogram.Position = [758 390 327 253];
+
+            % Create LoadButton
+            app.LoadButton = uibutton(app.DigitalImageProcessingToolPanel, 'push');
+            app.LoadButton.ButtonPushedFcn = createCallbackFcn(app, @LoadButtonPushed, true);
+            app.LoadButton.BackgroundColor = [0 0.4471 0.7412];
+            app.LoadButton.FontName = 'Arial';
+            app.LoadButton.FontSize = 18;
+            app.LoadButton.FontColor = [1 1 1];
+            app.LoadButton.Position = [79 18 295 30];
+            app.LoadButton.Text = 'Load Custom Image';
+
+            % Create SaveOutputImageButton
+            app.SaveOutputImageButton = uibutton(app.DigitalImageProcessingToolPanel, 'push');
+            app.SaveOutputImageButton.ButtonPushedFcn = createCallbackFcn(app, @SaveOutputImageButtonPushed, true);
+            app.SaveOutputImageButton.BackgroundColor = [0.4667 0.6745 0.1882];
+            app.SaveOutputImageButton.FontName = 'Arial';
+            app.SaveOutputImageButton.FontSize = 18;
+            app.SaveOutputImageButton.FontColor = [1 1 1];
+            app.SaveOutputImageButton.Position = [836 18 190 30];
+            app.SaveOutputImageButton.Text = 'Save Output Image';
+
+            % Create CONVERTTOButtonGroup
+            app.CONVERTTOButtonGroup = uibuttongroup(app.DigitalImageProcessingToolPanel);
+            app.CONVERTTOButtonGroup.SelectionChangedFcn = createCallbackFcn(app, @CONVERTTOButtonGroupSelectionChanged, true);
+            app.CONVERTTOButtonGroup.ForegroundColor = [1 1 1];
+            app.CONVERTTOButtonGroup.TitlePosition = 'centertop';
+            app.CONVERTTOButtonGroup.Title = 'CONVERT TO ';
+            app.CONVERTTOButtonGroup.BackgroundColor = [0.4196 0.4196 0.4196];
+            app.CONVERTTOButtonGroup.FontName = 'Arial';
+            app.CONVERTTOButtonGroup.FontSize = 15;
+            app.CONVERTTOButtonGroup.Position = [61 338 347 344];
+
+            % Create BlackAndWhiteButton
+            app.BlackAndWhiteButton = uiradiobutton(app.CONVERTTOButtonGroup);
+            app.BlackAndWhiteButton.Text = 'Black And White';
+            app.BlackAndWhiteButton.FontName = 'Arial';
+            app.BlackAndWhiteButton.FontSize = 18;
+            app.BlackAndWhiteButton.FontColor = [1 1 1];
+            app.BlackAndWhiteButton.Position = [21 287 153 22];
+            app.BlackAndWhiteButton.Value = true;
+
+            % Create SepiaButton
+            app.SepiaButton = uiradiobutton(app.CONVERTTOButtonGroup);
+            app.SepiaButton.Text = 'Sepia';
+            app.SepiaButton.FontName = 'Arial';
+            app.SepiaButton.FontSize = 18;
+            app.SepiaButton.FontColor = [1 1 1];
+            app.SepiaButton.Position = [21 257 68 22];
+
+            % Create RedMonochromeButton
+            app.RedMonochromeButton = uiradiobutton(app.CONVERTTOButtonGroup);
+            app.RedMonochromeButton.Text = 'Red Monochrome';
+            app.RedMonochromeButton.FontName = 'Arial';
+            app.RedMonochromeButton.FontSize = 18;
+            app.RedMonochromeButton.FontColor = [1 1 1];
+            app.RedMonochromeButton.Position = [20 224 165 22];
+
+            % Create BlueMonochromeButton
+            app.BlueMonochromeButton = uiradiobutton(app.CONVERTTOButtonGroup);
+            app.BlueMonochromeButton.Text = 'Blue Monochrome';
+            app.BlueMonochromeButton.FontName = 'Arial';
+            app.BlueMonochromeButton.FontSize = 18;
+            app.BlueMonochromeButton.FontColor = [1 1 1];
+            app.BlueMonochromeButton.Position = [20 192 168 22];
+
+            % Create GreenMonochromeButton
+            app.GreenMonochromeButton = uiradiobutton(app.CONVERTTOButtonGroup);
+            app.GreenMonochromeButton.Text = 'Green Monochrome';
+            app.GreenMonochromeButton.FontName = 'Arial';
+            app.GreenMonochromeButton.FontSize = 18;
+            app.GreenMonochromeButton.FontColor = [1 1 1];
+            app.GreenMonochromeButton.Position = [20 163 182 22];
+
+            % Create SharpenButton
+            app.SharpenButton = uiradiobutton(app.CONVERTTOButtonGroup);
+            app.SharpenButton.Text = 'Sharpen';
+            app.SharpenButton.FontName = 'Arial';
+            app.SharpenButton.FontSize = 18;
+            app.SharpenButton.FontColor = [1 1 1];
+            app.SharpenButton.Position = [20 102 90 22];
+
+            % Create BlurButton
+            app.BlurButton = uiradiobutton(app.CONVERTTOButtonGroup);
+            app.BlurButton.Text = 'Blur';
+            app.BlurButton.FontName = 'Arial';
+            app.BlurButton.FontSize = 18;
+            app.BlurButton.FontColor = [1 1 1];
+            app.BlurButton.Position = [20 73 54 22];
+
+            % Create BrightnessButton
+            app.BrightnessButton = uiradiobutton(app.CONVERTTOButtonGroup);
+            app.BrightnessButton.Text = 'Brightness';
+            app.BrightnessButton.FontName = 'Arial';
+            app.BrightnessButton.FontSize = 18;
+            app.BrightnessButton.FontColor = [1 1 1];
+            app.BrightnessButton.Position = [20 44 107 22];
+
+            % Create EdgeDetectionButton
+            app.EdgeDetectionButton = uiradiobutton(app.CONVERTTOButtonGroup);
+            app.EdgeDetectionButton.Text = 'Edge Detection';
+            app.EdgeDetectionButton.FontName = 'Arial';
+            app.EdgeDetectionButton.FontSize = 18;
+            app.EdgeDetectionButton.FontColor = [1 1 1];
+            app.EdgeDetectionButton.Position = [20 16 145 22];
+
+            % Create SliderLabel
+            app.SliderLabel = uilabel(app.CONVERTTOButtonGroup);
+            app.SliderLabel.HorizontalAlignment = 'center';
+            app.SliderLabel.FontName = 'Arial';
+            app.SliderLabel.FontSize = 18;
+            app.SliderLabel.FontColor = [0.149 0.149 0.149];
+            app.SliderLabel.Visible = 'off';
+            app.SliderLabel.Position = [110 102 51 22];
+            app.SliderLabel.Text = 'Slider';
+
+            % Create Slider
+            app.Slider = uislider(app.CONVERTTOButtonGroup);
+            app.Slider.FontName = 'Arial';
+            app.Slider.FontSize = 15;
+            app.Slider.FontColor = [1 1 1];
+            app.Slider.Position = [174 112 150 3];
+
+            % Create InvertColorsButton
+            app.InvertColorsButton = uiradiobutton(app.CONVERTTOButtonGroup);
+            app.InvertColorsButton.Text = 'Invert Colors';
+            app.InvertColorsButton.FontName = 'Arial';
+            app.InvertColorsButton.FontSize = 18;
+            app.InvertColorsButton.FontColor = [1 1 1];
+            app.InvertColorsButton.Position = [20 133 124 22];
+
+            % Show the figure after all components are created
+            app.UIFigure.Visible = 'on';
+        end
+    end
+
+    % App creation and deletion
+    methods (Access = public)
+
+        % Construct app
+        function app = Perfect_IVP_Project_code
+
+            % Create UIFigure and components
+            createComponents(app)
+
+            % Register the app with App Designer
+            registerApp(app, app.UIFigure)
+
+            % Execute the startup function
+            runStartupFcn(app, @startupFcn)
+
+            if nargout == 0
+                clear app
+            end
+        end
+
+        % Code that executes before app deletion
+        function delete(app)
+
+            % Delete UIFigure when app is deleted
+            delete(app.UIFigure)
+        end
+    end
+end
